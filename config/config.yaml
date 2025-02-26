@@ -1,0 +1,6 @@
+artifacts_root: artifacts
+
+data_ingestion:
+  root_dir: artifacts/data_ingestion
+  source_URL: https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/HIV.csv
+  local_data_file: artifacts/data_ingestion/HIV.csv
