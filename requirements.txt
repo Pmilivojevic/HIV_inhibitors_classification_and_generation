@@ -9,3 +9,4 @@ joblib
 types-PyYAML
 ensure==1.0.2
 seaborn
+scikit-learn

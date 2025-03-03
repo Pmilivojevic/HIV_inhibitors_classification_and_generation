@@ -4,3 +4,15 @@ data_ingestion:
   root_dir: artifacts/data_ingestion
   source_URL: https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/HIV.csv
   local_data_file: artifacts/data_ingestion/HIV.csv
+
+data_validation:
+  root_dir: artifacts/data_validation
+  local_data_file: artifacts/data_ingestion/HIV.csv
+  STATUS_FILE: artifacts/data_validation/status.txt
+
+data_transformation:
+  root_dir: artifacts/data_transformation
+  train_csv: artifacts/data_transformation/train.csv
+  test_csv: artifacts/data_transformation/test.csv
+  train_folder: artifacts/data_transformation/train
+  test_folder: artifacts/data_transformation/test
