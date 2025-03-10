@@ -12,6 +12,7 @@ data_validation:
 
 data_transformation:
   root_dir: artifacts/data_transformation
+  data_csv: artifacts/data_ingestion/HIV.csv
   train_csv: artifacts/data_transformation/train.csv
   test_csv: artifacts/data_transformation/test.csv
   train_folder: artifacts/data_transformation/train
