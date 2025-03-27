@@ -16,5 +16,6 @@ seaborn
 scikit-learn
 sympy
 scipy
+mango-optimizer
 
 -e .

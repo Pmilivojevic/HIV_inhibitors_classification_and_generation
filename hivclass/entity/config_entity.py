@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+from typing import List
 
 
 @dataclass(frozen=True)
@@ -27,3 +28,16 @@ class DataTransformationConfig:
     test_folder: Path
     params: dict
     dataset_val_status: bool
+
+
+@dataclass(frozen=True)
+class ModelTrainerConfig:
+    root_dir: Path
+    models: Path
+    stats: Path
+    source_root: Path
+    processed_root: Path
+    source_filename: str
+    processed_filename: List[str]
+    tuning: bool
+    model_params: dict

@@ -1,6 +1,11 @@
 from hivclass.constants import *
 from hivclass.utils.main_utils import read_yaml, create_directories
-from hivclass.entity.config_entity import DataIngestionConfig, DataValidationConfig, DataTransformationConfig
+from hivclass.entity.config_entity import (
+    DataIngestionConfig,
+    DataValidationConfig,
+    DataTransformationConfig,
+    ModelTrainerConfig
+)
 
 class ConfigurationManager:
     def __init__(
@@ -67,3 +72,23 @@ class ConfigurationManager:
         )
         
         return data_transformation_config
+    
+    def get_model_trainer_config(self) -> ModelTrainerConfig:
+        config = self.config.model_trainer
+        params = self.params.model_parameters
+        
+        create_directories([config.root_dir, config.models, config.stats])
+        
+        model_trainer_config = ModelTrainerConfig(
+            root_dir=config.root_dir,
+            models=config.models,
+            stats=config.stats,
+            source_root=config.source_root,
+            processed_root=config.processed_root,
+            source_filename=config.source_filename,
+            processed_filename=config.processed_filename,
+            tuning=config.tuning,
+            model_params=params
+        )
+        
+        return model_trainer_config

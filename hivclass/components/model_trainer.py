@@ -1,0 +1,291 @@
+from hivclass.utils.molecule_dataset import MoleculeDataset
+from hivclass.entity.config_entity import ModelTrainerConfig
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score
+import os
+import numpy as np
+import pandas as pd
+from hivclass.utils.molecule_dataset import MoleculeDataset
+from hivclass.utils.mol_gnn import MolGNN
+from hivclass.utils.main_utils import save_json, plot_metric, plot_confusion_matrix, plot_roc_curve
+import torch 
+from torch_geometric.data import DataLoader
+from box import ConfigBox
+import sys
+from tqdm import tqdm
+from mango import Tuner
+
+class ModelTrainer:
+    def __init__(self, config: ModelTrainerConfig):
+        self.config = config
+    
+    def train_val_separation(self, train_dataset):
+        data_df = pd.read_csv(os.path.join(self.config.processed_root, self.config.processed_filename[3]))
+        
+        data_name_list = os.listdir(os.path.join(self.config.processed_root, self.config.processed_filename[1]))
+        data_idxs = [int(name.split('.')[0].split('_')[1]) for name in data_name_list]
+        data_labels = [data_df.HIV_active[i] for i in data_idxs]
+        
+        # train_df, val_df = train_test_split(
+        #     data_df,
+        #     test_size=self.config.model_params.val_size,
+        #     stratify=data_df.HIV_active,
+        #     random_state=42
+        # )
+        
+        train_idxs, val_idxs, _, _ = train_test_split(
+            data_idxs,
+            data_labels,
+            test_size=self.config.model_params.val_size,
+            stratify=data_labels,
+            random_state=42
+        )
+        
+        # train_idxs = train_df.index.tolist()
+        # val_idxs = val_df.index.tolist()
+        
+        train = train_dataset.index_select(train_idxs)
+        val = train_dataset.index_select(val_idxs)
+        
+        return train, val
+    
+    def train(self, params, epoch, model, train_loader, optimizer, criterion, device):
+        model.train()
+        total_loss = 0.0
+        train_preds = []
+        train_labels = []
+        
+        for i, batch in tqdm(enumerate(train_loader)):
+            batch.to(device)
+            optimizer.zero_grad()
+            
+            preds = model(batch.x.float(), batch.edge_attr.float(), batch.edge_index, batch.batch)
+            train_preds.extend(torch.round(torch.squeeze(preds)).cpu().detach().numpy())
+            train_labels.extend(batch.y.cpu().detach().numpy())
+            
+            loss = criterion(torch.squeeze(preds), batch.y.float())
+            loss.backward()
+            optimizer.step()
+            
+            accuracy = accuracy_score(train_labels, train_preds)
+            
+            total_loss += loss.item()
+            
+            # print()
+            sys.stdout.write(
+                "Epoch:%2d/%2d - Batch:%2d/%2d - train_loss:%.4f - train_accuracy:%.4f" %(
+                    epoch,
+                    params.num_epochs,
+                    i,
+                    len(train_loader),
+                    loss.item(),
+                    accuracy
+                )
+            )
+            sys.stdout.flush()
+        
+        return total_loss / len(train_loader), accuracy
+    
+    def validation(self, epoch, model, val_loader, criterion, best_val_loss, device):
+        model.eval()
+        total_loss = 0.0
+        val_preds = []
+        val_labels = []
+        
+        with torch.no_grad():
+            for batch in tqdm(val_loader):
+                batch.to(device)
+                
+                preds = model(batch.x.float(), batch.edge_attr.float(), batch.edge_index, batch.batch)
+                val_preds.extend(torch.round(torch.squeeze(preds)).cpu().detach().numpy())
+                val_labels.extend(batch.y.cpu().detach().numpy())
+                
+                loss = criterion(torch.squeeze(preds), batch.y.float())
+                total_loss += loss.item()
+                accuracy = accuracy_score(val_labels, val_preds)
+            
+            epoch_loss = total_loss / len(val_loader)
+            
+            if epoch_loss < best_val_loss:
+                report = classification_report(
+                    val_labels,
+                    val_preds,
+                    zero_division=0,
+                    output_dict=True
+                )
+
+                save_json(
+                    os.path.join(self.config.stats, f'report_{epoch}.json'),
+                    report
+                )
+
+                conf_matrix = confusion_matrix(val_labels, val_preds)
+
+                plot_confusion_matrix(
+                    conf_matrix,
+                    self.config.stats,
+                    epoch,
+                    f'Confusion Matrix for epoch: {epoch}'
+                )
+
+                auc_score = roc_auc_score(val_labels, val_preds)
+                auc_score_dict = {'auc_score': auc_score}
+
+                save_json(
+                    os.path.join(self.config.stats, f'auc_score_{epoch}.json'), 
+                    auc_score_dict
+                )
+                
+                plot_roc_curve(
+                    val_labels,
+                    val_preds,
+                    self.config.stats,
+                    epoch
+                )
+                
+        return epoch_loss, accuracy
+    
+    def train_tuning(self):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print("device:", device)
+        
+        dataset = MoleculeDataset(
+            self.config.source_root,
+            self.config.processed_root,
+            self.config.source_filename,
+            self.config.processed_filename
+        )
+        
+        train_dataset, val_dataset = self.train_val_separation(dataset)
+        
+        def train_compose(params):
+            params = ConfigBox(params[0])
+            train_loader = DataLoader(train_dataset, batch_size=params['batch_size'], shuffle=True)
+            val_loader = DataLoader(val_dataset, batch_size=params['batch_size'], shuffle=False)
+            params["model_edge_dim"] = train_dataset[0].edge_attr.shape[1]
+            
+            print("Loading model...")
+            model_params = ConfigBox({k: v for k, v in params.items() if k.startswith("model_")})
+            model = MolGNN(feature_size=train_dataset[0].x.shape[1], model_params=model_params)
+            model = model.to(device)
+            
+            weight = torch.tensor([params["pos_weight"]], dtype=torch.float32).to(device)
+            criterion = torch.nn.BCEWithLogitsLoss(pos_weight=weight)
+            optimizer = torch.optim.SGD(
+                model.parameters(),
+                lr=params['learning_rate'],
+                momentum=params['sgd_momentum'],
+                weight_decay=params['weight_decay']
+            )
+            
+            scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=params.scheduler_gamma)
+            
+            train_losses = []
+            val_losses = []
+            train_accuracies = []
+            val_accuracies = []
+            best_val_loss = float('inf')
+            early_stopping_counter = 0
+            epochs_range = range(1, params.num_epochs + 1)
+            
+            for epoch in tqdm(range(params.num_epochs)):
+                if early_stopping_counter <= 10:
+                    train_epoch_loss, train_epoch_acc = self.train(
+                        params,
+                        epoch,
+                        model,
+                        train_loader,
+                        optimizer,
+                        criterion,
+                        device
+                    )
+                    
+                    train_losses.append(train_epoch_loss)
+                    train_accuracies.append(train_epoch_acc)
+                    
+                    val_epoch_loss, val_epoch_acc = self.validation(
+                        epoch,
+                        model,
+                        val_loader,
+                        criterion,
+                        best_val_loss,
+                        device
+                    )
+                    
+                    val_losses.append(val_epoch_loss)
+                    val_accuracies.append(val_epoch_acc)
+                    
+                    print(f'Epoch [{epoch+1}/{params.num_epochs}], '
+                        f'Loss: {train_epoch_loss:.4f}, '
+                        f'Validation Loss: {val_epoch_loss:.4f}, '
+                        f'Train Accuracy: {train_epoch_acc:.2f}%, '
+                        f'Validation Accuracy: {val_epoch_acc:.2f}%')
+                    
+                    if float(val_epoch_loss) < best_val_loss:
+                        torch.save(model.state_dict(), os.path.join(self.config.models, f'model_{epoch}.pth'))
+                        best_val_loss = float(val_epoch_loss)
+                        early_stopping_counter = 0
+                    else:
+                        early_stopping_counter += 1
+                    
+                    scheduler.step()
+                else:
+                    print("Early stopping due to no improvement.")
+                    
+                    plot_metric(
+                        self.config.stats,
+                        epochs_range,
+                        train_losses,
+                        val_losses,
+                        'Train Loss',
+                        'Validation Loss',
+                    )
+                    
+                    
+                    plot_metric(
+                        self.config.stats,
+                        epochs_range,
+                        train_accuracies,
+                        val_accuracies,
+                        'Train Accuracies',
+                        'Validation Accuracies',
+                    )
+                    
+                    return [best_val_loss]
+            
+            print(f"Finishing training with best test loss: {best_val_loss}")
+
+            plot_metric(
+                self.config.stats,
+                epochs_range,
+                train_losses,
+                val_losses,
+                'Train Loss',
+                'Validation Loss',
+            )
+            
+            
+            plot_metric(
+                self.config.stats,
+                epochs_range,
+                train_accuracies,
+                val_accuracies,
+                'Train Accuracies',
+                'Validation Accuracies',
+            )
+            
+            return [best_val_loss]
+        
+        if self.config.tuning:
+            print("Running hyperparameter search...")
+            params = self.config.model_params.HYPERPARAMETERS
+            config = dict()
+            config["optimizer"] = "Bayesian"
+            config["num_iteration"] = 100
+            
+            tuner = Tuner(params, objective=train_compose, conf_dict=config)
+            
+            results = tuner.minimize()
+        else:
+            params = self.config.model_params.BEST_PARAMETERS
+            best_val_loss = train_compose(params)
