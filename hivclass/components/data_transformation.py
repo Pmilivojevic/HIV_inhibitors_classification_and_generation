@@ -68,59 +68,53 @@ class DataTransformation:
         else:
             print("Dataset didn't pass validation!!!")
     
-    def data_preparation(self):
+    def data_preparation(self, dfs):
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        datas = [self.config.train_csv, self.config.test_csv]
+        datas = dfs
         save_dirs = [self.config.train_folder, self.config.test_folder]
         featurizer = dc.feat.MolGraphConvFeaturizer(use_edges=True)
 
         all_deepchem_data = []
 
         for data, save_dir in zip(datas, save_dirs):
-            with os.scandir(save_dir) as entries:
-                if not any(entries):
-                    data_df = pd.read_csv(data)
-                    data_name = os.path.basename(data).split('.')[0]
+            # data_df = pd.read_csv(data)
+            # name = os.path.splitext(os.path.basename(data))[0]  # Extract filename without extension
+            name = data.name[0]
+            i = 0
+            data_df = pd.DataFrame(columns=['name', 'smiles', 'HIV_active'])
+            
+            for mol in tqdm(data.itertuples(index=True), total=len(data), desc=f"Processing {name}"):
 
-                    for mol in tqdm(
-                        data_df.itertuples(index=True),
-                        total=len(data_df),
-                        desc=f"Processing {data_name}"
-                    ):
+                mol_obj = Chem.MolFromSmiles(mol.smiles)
+                if mol_obj is None:
+                    continue  # Skip invalid SMILES strings
+                
+                label = torch.tensor(mol.HIV_active, dtype=torch.int64, device=device)
+                
+                graph_features = featurizer._featurize(mol_obj)
 
-                        mol_obj = Chem.MolFromSmiles(mol.smiles)
-                        
-                        if mol_obj is None:
-                            continue  # Skip invalid SMILES strings
-                        
-                        label = torch.tensor(mol.HIV_active, dtype=torch.int64, device=device)
-                        
-                        graph_features = featurizer._featurize(mol_obj)
+                data_deepchem = Data(
+                    x=torch.tensor(graph_features.node_features, dtype=torch.float, device=device),
+                    edge_attr=torch.tensor(graph_features.edge_features, dtype=torch.float, device=device),
+                    edge_index=torch.tensor(graph_features.edge_index, dtype=torch.long, device=device),
+                    y=label, smiles=mol.smiles
+                )
+                all_deepchem_data.append(data_deepchem)
 
-                        data_deepchem = Data(
-                            x=torch.tensor(
-                                graph_features.node_features,
-                                dtype=torch.float,
-                                device=device
-                            ),
-                            edge_attr=torch.tensor(
-                                graph_features.edge_features,
-                                dtype=torch.float,
-                                device=device
-                            ),
-                            edge_index=torch.tensor(
-                                graph_features.edge_index,
-                                dtype=torch.long,
-                                device=device
-                            ),
-                            y=label, smiles=mol.smiles
-                        )
-                        all_deepchem_data.append(data_deepchem)
-
-                        # Save preprocessed molecule graph
-                        torch.save(data_deepchem, os.path.join(save_dir, f"{mol.name}.pt"))
+                # Save preprocessed molecule graph
+                filename = os.path.join(save_dir, f"{name}_{i}.pt")
+                torch.save(data_deepchem, filename)
+                
+                if os.path.exists(filename):
+                    mol_graph = torch.load(filename, weights_only=False)
+                    
+                    if mol_graph.y.item() != None:
+                        data_df.loc[i] = [f"{name}_{i}.pt", mol_graph.smiles, mol_graph.y.item()]
+                        i += 1
+            
+            data_df.to_csv(os.path.join(save_dir, f"{name}.csv"), index=False)
     
     def transformation_compose(self):
-        self.test_split_train_balanced()
-        self.data_preparation()
+        dfs = self.test_split_train_balanced()
+        self.data_preparation(dfs)
