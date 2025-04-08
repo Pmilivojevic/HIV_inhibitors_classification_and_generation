@@ -1,10 +1,13 @@
 from hivclass.utils.molecule_dataset import MoleculeDataset
 from hivclass.entity.config_entity import ModelTrainerConfig
+from hivclass.utils.main_utils import create_directories
+from hivclass.constants import PARAMS_FILE_PATH
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score
 import os
 import numpy as np
 import pandas as pd
+import yaml
 from hivclass.utils.molecule_dataset import MoleculeDataset
 from hivclass.utils.mol_gnn import MolGNN
 from hivclass.utils.main_utils import save_json, plot_metric, plot_confusion_matrix, plot_roc_curve
@@ -20,29 +23,20 @@ class ModelTrainer:
         self.config = config
     
     def train_val_separation(self, train_dataset):
-        data_df = pd.read_csv(os.path.join(self.config.processed_root, self.config.processed_filename[3]))
+        data_df = pd.read_csv(os.path.join(
+            self.config.processed_root,
+            self.config.processed_filename[3]
+        ))
         
-        data_name_list = os.listdir(os.path.join(self.config.processed_root, self.config.processed_filename[1]))
-        data_idxs = [int(name.split('.')[0].split('_')[1]) for name in data_name_list]
-        data_labels = [data_df.HIV_active[i] for i in data_idxs]
-        
-        # train_df, val_df = train_test_split(
-        #     data_df,
-        #     test_size=self.config.model_params.val_size,
-        #     stratify=data_df.HIV_active,
-        #     random_state=42
-        # )
-        
-        train_idxs, val_idxs, _, _ = train_test_split(
-            data_idxs,
-            data_labels,
-            test_size=self.config.model_params.val_size,
-            stratify=data_labels,
+        train_df, val_df = train_test_split(
+            data_df,
+            test_size=self.config.params.data_transformation.val_size,
+            stratify=data_df.HIV_active,
             random_state=42
         )
         
-        # train_idxs = train_df.index.tolist()
-        # val_idxs = val_df.index.tolist()
+        train_idxs = train_df.index.tolist()
+        val_idxs = val_df.index.tolist()
         
         train = train_dataset.index_select(train_idxs)
         val = train_dataset.index_select(val_idxs)
@@ -60,7 +54,7 @@ class ModelTrainer:
             optimizer.zero_grad()
             
             preds = model(batch.x.float(), batch.edge_attr.float(), batch.edge_index, batch.batch)
-            train_preds.extend(torch.round(torch.squeeze(preds)).cpu().detach().numpy())
+            train_preds.extend(np.rint(torch.sigmoid(preds).cpu().detach().numpy()))
             train_labels.extend(batch.y.cpu().detach().numpy())
             
             loss = criterion(torch.squeeze(preds), batch.y.float())
@@ -71,7 +65,7 @@ class ModelTrainer:
             
             total_loss += loss.item()
             
-            # print()
+            print()
             sys.stdout.write(
                 "Epoch:%2d/%2d - Batch:%2d/%2d - train_loss:%.4f - train_accuracy:%.4f" %(
                     epoch,
@@ -86,7 +80,7 @@ class ModelTrainer:
         
         return total_loss / len(train_loader), accuracy
     
-    def validation(self, epoch, model, val_loader, criterion, best_val_loss, device):
+    def validation(self, epoch, model, val_loader, criterion, best_val_loss, stats_path,  device):
         model.eval()
         total_loss = 0.0
         val_preds = []
@@ -97,7 +91,7 @@ class ModelTrainer:
                 batch.to(device)
                 
                 preds = model(batch.x.float(), batch.edge_attr.float(), batch.edge_index, batch.batch)
-                val_preds.extend(torch.round(torch.squeeze(preds)).cpu().detach().numpy())
+                val_preds.extend(np.rint(torch.sigmoid(preds).cpu().detach().numpy()))
                 val_labels.extend(batch.y.cpu().detach().numpy())
                 
                 loss = criterion(torch.squeeze(preds), batch.y.float())
@@ -115,7 +109,7 @@ class ModelTrainer:
                 )
 
                 save_json(
-                    os.path.join(self.config.stats, f'report_{epoch}.json'),
+                    os.path.join(stats_path, f'report_{epoch}.json'),
                     report
                 )
 
@@ -123,7 +117,7 @@ class ModelTrainer:
 
                 plot_confusion_matrix(
                     conf_matrix,
-                    self.config.stats,
+                    stats_path,
                     epoch,
                     f'Confusion Matrix for epoch: {epoch}'
                 )
@@ -132,14 +126,14 @@ class ModelTrainer:
                 auc_score_dict = {'auc_score': auc_score}
 
                 save_json(
-                    os.path.join(self.config.stats, f'auc_score_{epoch}.json'), 
+                    os.path.join(stats_path, f'auc_score_{epoch}.json'), 
                     auc_score_dict
                 )
                 
                 plot_roc_curve(
                     val_labels,
                     val_preds,
-                    self.config.stats,
+                    stats_path,
                     epoch
                 )
                 
@@ -159,7 +153,23 @@ class ModelTrainer:
         train_dataset, val_dataset = self.train_val_separation(dataset)
         
         def train_compose(params):
-            params = ConfigBox(params[0])
+            params = params[0]
+            
+            if self.config.tuning:
+                folder_name = str(len(os.listdir(self.config.stats)) + 1)
+            else:
+                folder_name = "best_params"
+            
+            models_path = os.path.join(self.config.models, folder_name)
+            stats_path = os.path.join(self.config.stats, folder_name)
+            
+            create_directories([models_path, stats_path])
+            
+            with open(os.path.join(stats_path, "params.yaml"), 'w') as file:
+                file.write(yaml.dump(params, sort_keys=False))
+            
+            params = ConfigBox(params)
+            
             train_loader = DataLoader(train_dataset, batch_size=params['batch_size'], shuffle=True)
             val_loader = DataLoader(val_dataset, batch_size=params['batch_size'], shuffle=False)
             params["model_edge_dim"] = train_dataset[0].edge_attr.shape[1]
@@ -209,6 +219,7 @@ class ModelTrainer:
                         val_loader,
                         criterion,
                         best_val_loss,
+                        stats_path,
                         device
                     )
                     
@@ -222,7 +233,7 @@ class ModelTrainer:
                         f'Validation Accuracy: {val_epoch_acc:.2f}%')
                     
                     if float(val_epoch_loss) < best_val_loss:
-                        torch.save(model.state_dict(), os.path.join(self.config.models, f'model_{epoch}.pth'))
+                        torch.save(model.state_dict(), os.path.join(models_path, f'model_{epoch}.pth'))
                         best_val_loss = float(val_epoch_loss)
                         early_stopping_counter = 0
                     else:
@@ -233,7 +244,7 @@ class ModelTrainer:
                     print("Early stopping due to no improvement.")
                     
                     plot_metric(
-                        self.config.stats,
+                        stats_path,
                         epochs_range,
                         train_losses,
                         val_losses,
@@ -243,7 +254,7 @@ class ModelTrainer:
                     
                     
                     plot_metric(
-                        self.config.stats,
+                        stats_path,
                         epochs_range,
                         train_accuracies,
                         val_accuracies,
@@ -256,7 +267,7 @@ class ModelTrainer:
             print(f"Finishing training with best test loss: {best_val_loss}")
 
             plot_metric(
-                self.config.stats,
+                stats_path,
                 epochs_range,
                 train_losses,
                 val_losses,
@@ -266,7 +277,7 @@ class ModelTrainer:
             
             
             plot_metric(
-                self.config.stats,
+                stats_path,
                 epochs_range,
                 train_accuracies,
                 val_accuracies,
@@ -278,14 +289,20 @@ class ModelTrainer:
         
         if self.config.tuning:
             print("Running hyperparameter search...")
-            params = self.config.model_params.HYPERPARAMETERS
+            params = self.config.params.HYPERPARAMETERS
             config = dict()
             config["optimizer"] = "Bayesian"
-            config["num_iteration"] = 100
+            config["num_iteration"] = params.tuning_iterations
             
             tuner = Tuner(params, objective=train_compose, conf_dict=config)
             
             results = tuner.minimize()
+            
+            self.config.params['BEST_PARAMETERS'] = results['best_parameters']
+            best_params = yaml.save_dump(self.config.params, sort_keys=False)
+            
+            with open(PARAMS_FILE_PATH, 'w') as file:
+                file.write(best_params)
         else:
-            params = self.config.model_params.BEST_PARAMETERS
+            params = self.config.params.BEST_PARAMETERS
             best_val_loss = train_compose(params)

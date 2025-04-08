@@ -90,13 +90,20 @@ class MoleculeDataset(Dataset):
             raise e
     
     def len(self) -> int:
+        # data_list = os.listdir(os.path.join(self.processed_root, self.data_name))
         data_df = pd.read_csv(os.path.join(self.processed_root, self.data_name + '.csv'))
         
         return data_df.shape[0]
     
     def get(self, idx: int) -> Data:
+        data_path = os.path.join(self.processed_dir, self.data_name, f'{self.data_name}_{idx}.pt')
+        
+        while not os.path.exists(data_path):
+            idx += 1
+            data_path = os.path.join(self.processed_dir, self.data_name, f'{self.data_name}_{idx}.pt')
+        
         sample = torch.load(
-            os.path.join(self.processed_dir, self.data_name, f'{self.data_name}_{idx}.pt'),
+            data_path,
             weights_only=False
         )
         

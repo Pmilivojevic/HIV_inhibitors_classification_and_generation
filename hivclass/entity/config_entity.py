@@ -40,4 +40,4 @@ class ModelTrainerConfig:
     source_filename: str
     processed_filename: List[str]
     tuning: bool
-    model_params: dict
+    params: dict

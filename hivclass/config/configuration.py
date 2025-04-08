@@ -75,7 +75,7 @@ class ConfigurationManager:
     
     def get_model_trainer_config(self) -> ModelTrainerConfig:
         config = self.config.model_trainer
-        params = self.params.model_parameters
+        params = self.params
         
         create_directories([config.root_dir, config.models, config.stats])
         
@@ -88,7 +88,7 @@ class ConfigurationManager:
             source_filename=config.source_filename,
             processed_filename=config.processed_filename,
             tuning=config.tuning,
-            model_params=params
+            params=params
         )
         
         return model_trainer_config
