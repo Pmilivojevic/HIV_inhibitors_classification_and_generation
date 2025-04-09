@@ -3,6 +3,7 @@ data_transformation:
   val_size: 0.2
 
 HYPERPARAMETERS:
+  early_stopping: [10]
   tuning_iterations: [100]
   num_epochs: [30, 50, 100]
   batch_size: [32, 128, 64]
@@ -20,6 +21,7 @@ HYPERPARAMETERS:
   model_dense_neurons: [16, 128, 64, 256, 32]
 
 BEST_PARAMETERS:
+  early_stopping: None
   tuning_iterations: None
   num_epochs: None
   batch_size: None

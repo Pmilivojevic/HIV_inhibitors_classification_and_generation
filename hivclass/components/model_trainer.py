@@ -196,10 +196,9 @@ class ModelTrainer:
             val_accuracies = []
             best_val_loss = float('inf')
             early_stopping_counter = 0
-            epochs_range = range(1, params.num_epochs + 1)
             
             for epoch in tqdm(range(params.num_epochs)):
-                if early_stopping_counter <= 10:
+                if early_stopping_counter <= params.early_stopping:
                     train_epoch_loss, train_epoch_acc = self.train(
                         params,
                         epoch,
@@ -242,6 +241,7 @@ class ModelTrainer:
                     scheduler.step()
                 else:
                     print("Early stopping due to no improvement.")
+                    epochs_range = range(1, len(train_losses) + 1)
                     
                     plot_metric(
                         stats_path,
@@ -251,7 +251,6 @@ class ModelTrainer:
                         'Train Loss',
                         'Validation Loss',
                     )
-                    
                     
                     plot_metric(
                         stats_path,
@@ -265,6 +264,7 @@ class ModelTrainer:
                     return [best_val_loss]
             
             print(f"Finishing training with best test loss: {best_val_loss}")
+            epochs_range = range(1, params.num_epochs + 1)
 
             plot_metric(
                 stats_path,
@@ -274,7 +274,6 @@ class ModelTrainer:
                 'Train Loss',
                 'Validation Loss',
             )
-            
             
             plot_metric(
                 stats_path,
