@@ -61,7 +61,10 @@ class ModelTrainer:
             loss.backward()
             optimizer.step()
             
-            accuracy = accuracy_score(train_labels, train_preds)
+            if None not in train_preds:
+                accuracy = accuracy_score(train_labels, train_preds)
+            else:
+                accuracy = 0.0
             
             total_loss += loss.item()
             
@@ -153,145 +156,153 @@ class ModelTrainer:
         train_dataset, val_dataset = self.train_val_separation(dataset)
         
         def train_compose(params):
-            params = params[0]
-            
-            if self.config.tuning:
-                folder_name = str(len(os.listdir(self.config.stats)) + 1)
-            else:
-                folder_name = "best_params"
-            
-            models_path = os.path.join(self.config.models, folder_name)
-            stats_path = os.path.join(self.config.stats, folder_name)
-            
-            create_directories([models_path, stats_path])
-            
-            with open(os.path.join(stats_path, "params.yaml"), 'w') as file:
-                file.write(yaml.dump(params, sort_keys=False))
-            
-            params = ConfigBox(params)
-            
-            train_loader = DataLoader(train_dataset, batch_size=params['batch_size'], shuffle=True)
-            val_loader = DataLoader(val_dataset, batch_size=params['batch_size'], shuffle=False)
-            params["model_edge_dim"] = train_dataset[0].edge_attr.shape[1]
-            
-            print("Loading model...")
-            model_params = ConfigBox({k: v for k, v in params.items() if k.startswith("model_")})
-            model = MolGNN(feature_size=train_dataset[0].x.shape[1], model_params=model_params)
-            model = model.to(device)
-            
-            weight = torch.tensor([params["pos_weight"]], dtype=torch.float32).to(device)
-            criterion = torch.nn.BCEWithLogitsLoss(pos_weight=weight)
-            optimizer = torch.optim.SGD(
-                model.parameters(),
-                lr=params['learning_rate'],
-                momentum=params['sgd_momentum'],
-                weight_decay=params['weight_decay']
-            )
-            
-            scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=params.scheduler_gamma)
-            
-            train_losses = []
-            val_losses = []
-            train_accuracies = []
-            val_accuracies = []
-            best_val_loss = float('inf')
-            early_stopping_counter = 0
-            
-            for epoch in tqdm(range(params.num_epochs)):
-                if early_stopping_counter <= params.early_stopping:
-                    train_epoch_loss, train_epoch_acc = self.train(
-                        params,
-                        epoch,
-                        model,
-                        train_loader,
-                        optimizer,
-                        criterion,
-                        device
-                    )
-                    
-                    train_losses.append(train_epoch_loss)
-                    train_accuracies.append(train_epoch_acc)
-                    
-                    val_epoch_loss, val_epoch_acc = self.validation(
-                        epoch,
-                        model,
-                        val_loader,
-                        criterion,
-                        best_val_loss,
-                        stats_path,
-                        device
-                    )
-                    
-                    val_losses.append(val_epoch_loss)
-                    val_accuracies.append(val_epoch_acc)
-                    
-                    print(f'Epoch [{epoch+1}/{params.num_epochs}], '
-                        f'Loss: {train_epoch_loss:.4f}, '
-                        f'Validation Loss: {val_epoch_loss:.4f}, '
-                        f'Train Accuracy: {train_epoch_acc:.2f}%, '
-                        f'Validation Accuracy: {val_epoch_acc:.2f}%')
-                    
-                    if float(val_epoch_loss) < best_val_loss:
-                        torch.save(model.state_dict(), os.path.join(models_path, f'model_{epoch}.pth'))
-                        best_val_loss = float(val_epoch_loss)
-                        early_stopping_counter = 0
-                    else:
-                        early_stopping_counter += 1
-                    
-                    scheduler.step()
+            try:
+                params = params[0]
+                
+                if self.config.tuning:
+                    folder_name = str(len(os.listdir(self.config.stats)) + 1)
                 else:
-                    print("Early stopping due to no improvement.")
-                    epochs_range = range(1, len(train_losses) + 1)
-                    
-                    plot_metric(
-                        stats_path,
-                        epochs_range,
-                        train_losses,
-                        val_losses,
-                        'Train Loss',
-                        'Validation Loss',
-                    )
-                    
-                    plot_metric(
-                        stats_path,
-                        epochs_range,
-                        train_accuracies,
-                        val_accuracies,
-                        'Train Accuracies',
-                        'Validation Accuracies',
-                    )
-                    
-                    return [best_val_loss]
-            
-            print(f"Finishing training with best test loss: {best_val_loss}")
-            epochs_range = range(1, params.num_epochs + 1)
+                    folder_name = "best_params"
+                
+                models_path = os.path.join(self.config.models, folder_name)
+                stats_path = os.path.join(self.config.stats, folder_name)
+                
+                create_directories([models_path, stats_path])
+                
+                with open(os.path.join(stats_path, "params.yaml"), 'w') as file:
+                    file.write(yaml.dump(params, sort_keys=False))
+                
+                params = ConfigBox(params)
+                
+                train_loader = DataLoader(train_dataset, batch_size=params['batch_size'], shuffle=True)
+                val_loader = DataLoader(val_dataset, batch_size=params['batch_size'], shuffle=False)
+                params["model_edge_dim"] = train_dataset[0].edge_attr.shape[1]
+                
+                print("Loading model...")
+                model_params = ConfigBox({k: v for k, v in params.items() if k.startswith("model_")})
+                model = MolGNN(feature_size=train_dataset[0].x.shape[1], model_params=model_params)
+                model = model.to(device)
+                
+                weight = torch.tensor([params["pos_weight"]], dtype=torch.float32).to(device)
+                criterion = torch.nn.BCEWithLogitsLoss(pos_weight=weight)
+                optimizer = torch.optim.SGD(
+                    model.parameters(),
+                    lr=params['learning_rate'],
+                    momentum=params['sgd_momentum'],
+                    weight_decay=params['weight_decay']
+                )
+                
+                scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=params.scheduler_gamma)
+                
+                train_losses = []
+                val_losses = []
+                train_accuracies = []
+                val_accuracies = []
+                best_val_loss = float('inf')
+                early_stopping_counter = 0
+                
+                for epoch in tqdm(range(params.num_epochs)):
+                    if early_stopping_counter <= params.early_stopping:
+                        train_epoch_loss, train_epoch_acc = self.train(
+                            params,
+                            epoch,
+                            model,
+                            train_loader,
+                            optimizer,
+                            criterion,
+                            device
+                        )
+                        
+                        train_losses.append(train_epoch_loss)
+                        train_accuracies.append(train_epoch_acc)
+                        
+                        val_epoch_loss, val_epoch_acc = self.validation(
+                            epoch,
+                            model,
+                            val_loader,
+                            criterion,
+                            best_val_loss,
+                            stats_path,
+                            device
+                        )
+                        
+                        val_losses.append(val_epoch_loss)
+                        val_accuracies.append(val_epoch_acc)
+                        
+                        print(f'Epoch [{epoch+1}/{params.num_epochs}], '
+                            f'Loss: {train_epoch_loss:.4f}, '
+                            f'Validation Loss: {val_epoch_loss:.4f}, '
+                            f'Train Accuracy: {train_epoch_acc:.2f}%, '
+                            f'Validation Accuracy: {val_epoch_acc:.2f}%')
+                        
+                        if float(val_epoch_loss) < best_val_loss:
+                            torch.save(model.state_dict(), os.path.join(models_path, f'model_{epoch}.pth'))
+                            best_val_loss = float(val_epoch_loss)
+                            early_stopping_counter = 0
+                        else:
+                            early_stopping_counter += 1
+                        
+                        scheduler.step()
+                    else:
+                        print("Early stopping due to no improvement.")
+                        epochs_range = range(1, len(train_losses) + 1)
+                        
+                        plot_metric(
+                            stats_path,
+                            epochs_range,
+                            train_losses,
+                            val_losses,
+                            'Train Loss',
+                            'Validation Loss',
+                        )
+                        
+                        plot_metric(
+                            stats_path,
+                            epochs_range,
+                            train_accuracies,
+                            val_accuracies,
+                            'Train Accuracies',
+                            'Validation Accuracies',
+                        )
+                        
+                        return [best_val_loss]
+                
+                print(f"Finishing training with best test loss: {best_val_loss}")
+                epochs_range = range(1, params.num_epochs + 1)
 
-            plot_metric(
-                stats_path,
-                epochs_range,
-                train_losses,
-                val_losses,
-                'Train Loss',
-                'Validation Loss',
-            )
+                plot_metric(
+                    stats_path,
+                    epochs_range,
+                    train_losses,
+                    val_losses,
+                    'Train Loss',
+                    'Validation Loss',
+                )
+                
+                plot_metric(
+                    stats_path,
+                    epochs_range,
+                    train_accuracies,
+                    val_accuracies,
+                    'Train Accuracies',
+                    'Validation Accuracies',
+                )
+                
+                return [best_val_loss]
             
-            plot_metric(
-                stats_path,
-                epochs_range,
-                train_accuracies,
-                val_accuracies,
-                'Train Accuracies',
-                'Validation Accuracies',
-            )
-            
-            return [best_val_loss]
+            except Exception as e:
+                print(f"[ERROR] Training failed for params: {params}")
+                print(f"[ERROR] Exception: {e}")
+
+                # return a large loss so Mango avoids this config
+                return [float(2.0)]
         
         if self.config.tuning:
             print("Running hyperparameter search...")
             params = self.config.params.HYPERPARAMETERS
             config = dict()
             config["optimizer"] = "Bayesian"
-            config["num_iteration"] = params.tuning_iterations
+            config["num_iteration"] = params.tuning_iterations[0]
             
             tuner = Tuner(params, objective=train_compose, conf_dict=config)
             
