@@ -71,7 +71,7 @@ class ModelTrainer:
             print()
             sys.stdout.write(
                 "Epoch:%2d/%2d - Batch:%2d/%2d - train_loss:%.4f - train_accuracy:%.4f" %(
-                    epoch,
+                    epoch+1,
                     params.num_epochs,
                     i,
                     len(train_loader),
@@ -142,7 +142,7 @@ class ModelTrainer:
                 
         return epoch_loss, accuracy
     
-    def train_tuning(self):
+    def train_compose(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print("device:", device)
         
@@ -155,7 +155,7 @@ class ModelTrainer:
         
         train_dataset, val_dataset = self.train_val_separation(dataset)
         
-        def train_compose(params):
+        def train_tuning(params):
             try:
                 params = params[0]
                 
@@ -304,15 +304,15 @@ class ModelTrainer:
             config["optimizer"] = "Bayesian"
             config["num_iteration"] = params.tuning_iterations[0]
             
-            tuner = Tuner(params, objective=train_compose, conf_dict=config)
+            tuner = Tuner(params, objective=train_tuning, conf_dict=config)
             
             results = tuner.minimize()
             
-            self.config.params['BEST_PARAMETERS'] = results['best_parameters']
+            self.config.params['BEST_PARAMETERS'] = results['best_params']
             best_params = yaml.save_dump(self.config.params, sort_keys=False)
             
             with open(PARAMS_FILE_PATH, 'w') as file:
                 file.write(best_params)
         else:
             params = self.config.params.BEST_PARAMETERS
-            best_val_loss = train_compose(params)
+            _ = train_tuning(params)
