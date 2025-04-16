@@ -10,6 +10,12 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve
 import seaborn as sns
+from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedSeq
+from ruamel.yaml.scalarfloat import ScalarFloat
+from decimal import Decimal
+import re
+from io import StringIO
 
 @ensure_annotations
 def create_directories(path_to_directories: list, verbose: bool=True):
@@ -55,6 +61,53 @@ def read_yaml(path_to_yaml: Path) -> ConfigBox:
     
     except Exception as e:
         raise e
+
+@ensure_annotations
+def prepare_yaml_and_inline_lists(data):
+    yaml = YAML()
+    yaml.default_flow_style = False
+    yaml.indent(mapping=2, sequence=4, offset=2)
+
+    # Fix float representation
+    def float_representer(representer, data):
+        value = "{:.10g}".format(data)
+        if '.' not in value and 'e' not in value:
+            value += '.0'
+        return representer.represent_scalar('tag:yaml.org,2002:float', value)
+
+    yaml.representer.add_representer(float, float_representer)
+
+    # Recursively replace lists with inline CommentedSeq
+    def force_inline_lists(d):
+        if isinstance(d, dict):
+            for k, v in d.items():
+                if isinstance(v, list):
+                    new_list = []
+                    for item in v:
+                        if isinstance(item, str) and re.fullmatch(r"[-+]?\d*\.?\d+(e[-+]?\d+)?", item):
+                            try:
+                                item = float(item)
+                            except ValueError:
+                                pass
+                        new_list.append(item)
+                    seq = CommentedSeq(new_list)
+                    seq.fa.set_flow_style()
+                    d[k] = seq  # ✅ Replace, don’t append
+                elif isinstance(v, dict):
+                    force_inline_lists(v)
+                elif isinstance(v, str) and re.fullmatch(r"[-+]?\d*\.?\d+(e[-+]?\d+)?", v):
+                    try:
+                        d[k] = float(v)
+                    except ValueError:
+                        pass
+
+    force_inline_lists(data)
+    
+    stream = StringIO()
+    yaml.dump(data, stream)
+    yaml_output = stream.getvalue()
+
+    return yaml_output
 
 @ensure_annotations
 def save_json(path: str, data: dict):

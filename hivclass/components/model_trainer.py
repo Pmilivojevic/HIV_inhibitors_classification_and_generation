@@ -10,7 +10,13 @@ import pandas as pd
 import yaml
 from hivclass.utils.molecule_dataset import MoleculeDataset
 from hivclass.utils.mol_gnn import MolGNN
-from hivclass.utils.main_utils import save_json, plot_metric, plot_confusion_matrix, plot_roc_curve
+from hivclass.utils.main_utils import (
+    save_json,
+    plot_metric,
+    plot_confusion_matrix,
+    plot_roc_curve,
+    prepare_yaml_and_inline_lists
+)
 import torch 
 from torch_geometric.data import DataLoader
 from box import ConfigBox
@@ -170,7 +176,7 @@ class ModelTrainer:
                 create_directories([models_path, stats_path])
                 
                 with open(os.path.join(stats_path, "params.yaml"), 'w') as file:
-                    file.write(yaml.dump(params, sort_keys=False))
+                    file.write(yaml.safe_dump(params, sort_keys=False))
                 
                 params = ConfigBox(params)
                 
@@ -301,7 +307,7 @@ class ModelTrainer:
             print("Running hyperparameter search...")
             params = self.config.params.HYPERPARAMETERS
             config = dict()
-            config["optimizer"] = "Bayesian"
+            config["optimizer"] = params.tuning_optimizer[0]
             config["num_iteration"] = params.tuning_iterations[0]
             
             tuner = Tuner(params, objective=train_tuning, conf_dict=config)
@@ -309,10 +315,12 @@ class ModelTrainer:
             results = tuner.minimize()
             
             self.config.params['BEST_PARAMETERS'] = results['best_params']
-            best_params = yaml.save_dump(self.config.params, sort_keys=False)
+            params_dict = self.config.params.to_dict()
+            params_yaml = prepare_yaml_and_inline_lists(params_dict)
+            # best_params = yaml.safe_dump(self.config.params.to_dict(), sort_keys=False, default_flow_style=True)
             
             with open(PARAMS_FILE_PATH, 'w') as file:
-                file.write(best_params)
+                file.write(params_yaml)
         else:
             params = self.config.params.BEST_PARAMETERS
             _ = train_tuning(params)

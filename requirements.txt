@@ -17,5 +17,6 @@ scikit-learn
 sympy
 scipy
 arm-mango
+ruamel.yaml
 
 -e .
