@@ -174,9 +174,15 @@ class ModelTrainer:
                 stats_path = os.path.join(self.config.stats, folder_name)
                 
                 create_directories([models_path, stats_path])
+
+                # params_dict = params.to_dict()
+                # params_yaml = prepare_yaml_and_inline_lists(params_dict)
+
+                # with open(os.path.join(stats_path, "params.yaml"), 'w') as file:
+                #     file.write(params_yaml)
                 
                 with open(os.path.join(stats_path, "params.yaml"), 'w') as file:
-                    file.write(yaml.safe_dump(params, sort_keys=False))
+                    file.write(yaml.dump(params, sort_keys=False))
                 
                 params = ConfigBox(params)
                 
@@ -301,7 +307,7 @@ class ModelTrainer:
                 print(f"[ERROR] Exception: {e}")
 
                 # return a large loss so Mango avoids this config
-                return [float(2.0)]
+                return [float('inf')]
         
         if self.config.tuning:
             print("Running hyperparameter search...")
@@ -323,4 +329,5 @@ class ModelTrainer:
                 file.write(params_yaml)
         else:
             params = self.config.params.BEST_PARAMETERS
-            _ = train_tuning(params)
+            params = params.to_dict()
+            _ = train_tuning([params])

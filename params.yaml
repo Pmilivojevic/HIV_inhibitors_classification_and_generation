@@ -3,36 +3,37 @@ data_transformation:
   val_size: 0.2
 HYPERPARAMETERS:
   tuning_optimizer: [Random]
-  early_stopping: [10]
+  early_stopping: [15]
   tuning_iterations: [100]
-  num_epochs: [30, 60, 120]
-  batch_size: [128, 256, 512]
-  learning_rate: [0.1, 0.01, 0.001, 0.0001]
-  weight_decay: [0.001, 0.0001, 1e-05]
-  sgd_momentum: [0.9, 0.8, 0.5]
-  scheduler_gamma: [1.0, 0.9, 0.5]
-  pos_weight: [1.0, 3.0, 7.0]
-  model_embedding_size: [8, 16, 32, 64, 128]
-  model_attention_heads: [1, 2, 3]
-  model_layers: [2, 3, 4, 5]
-  model_dropout_rate: [0.1, 0.2, 0.3, 0.4]
-  model_top_k_ratio: [0.1, 0.2, 0.3, 0.4]
-  model_top_k_every_n: [0, 3, 4]
-  model_dense_neurons: [32, 64, 128]
+  num_epochs: [300]
+  batch_size: [512]
+  learning_rate: [0.01, 0.001]
+  weight_decay: [0.001, 0.0001]
+  sgd_momentum: [0.9]
+  scheduler_gamma: [1.0]
+  pos_weight: [1.0, 3.0, 5.0]
+  model_embedding_size: [128]
+  model_attention_heads: [2, 3]
+  model_layers: [2, 3, 4]
+  model_dropout_rate: [0.1, 0.2]
+  model_top_k_ratio: [0.4]
+  model_top_k_every_n: [3]
+  model_dense_neurons: [64]
 BEST_PARAMETERS:
-  early_stopping: None
-  tuning_iterations: None
-  num_epochs: None
-  batch_size: None
-  learning_rate: None
-  weight_decay: None
-  sgd_momentum: None
-  scheduler_gamma: None
-  pos_weight: None
-  model_embedding_size: None
-  model_attention_heads: None
-  model_layers: None
-  model_dropout_rate: None
-  model_top_k_ratio: None
-  model_top_k_every_n: None
-  model_dense_neurons: None
+  weight_decay: 0.001
+  tuning_optimizer: Random
+  tuning_iterations: 100
+  sgd_momentum: 0.9
+  scheduler_gamma: 1.0
+  pos_weight: 3.0
+  num_epochs: 300
+  model_top_k_ratio: 0.4
+  model_top_k_every_n: 3
+  model_layers: 4
+  model_embedding_size: 128
+  model_dropout_rate: 0.2
+  model_dense_neurons: 64
+  model_attention_heads: 3
+  learning_rate: 0.001
+  early_stopping: 15
+  batch_size: 512
