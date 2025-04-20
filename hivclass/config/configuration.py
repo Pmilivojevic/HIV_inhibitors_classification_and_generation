@@ -4,7 +4,8 @@ from hivclass.entity.config_entity import (
     DataIngestionConfig,
     DataValidationConfig,
     DataTransformationConfig,
-    ModelTrainerConfig
+    ModelTrainerConfig,
+    ModelEvaluationConfig
 )
 
 class ConfigurationManager:
@@ -92,3 +93,21 @@ class ConfigurationManager:
         )
         
         return model_trainer_config
+    
+    def get_model_evaluation_config(self) -> ModelEvaluationConfig:
+        config = self.config.model_evaluation
+        params = self.params.BEST_PARAMETERS
+        
+        create_directories([config.root_dir])
+        
+        model_evaluation_config = ModelEvaluationConfig(
+            root_dir=config.root_dir,
+            model_folder_path=config.model_folder_path,
+            source_root=config.source_root,
+            processed_root=config.processed_root,
+            source_filename=config.source_filename,
+            processed_filename=config.processed_filename,
+            params=params
+        )
+        
+        return model_evaluation_config

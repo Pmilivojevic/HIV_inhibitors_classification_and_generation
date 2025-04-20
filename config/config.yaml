@@ -27,3 +27,11 @@ model_trainer:
   source_filename: HIV.csv
   processed_filename: [test, train, test.csv, train.csv]
   tuning: True
+
+model_evaluation:
+  root_dir: artifacts/model_evaluation
+  model_folder_path: artifacts/model_trainer/models/best_params
+  source_root: artifacts/data_ingestion
+  processed_root: artifacts/data_transformation
+  source_filename: HIV.csv
+  processed_filename: [test, train, test.csv, train.csv]

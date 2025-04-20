@@ -41,3 +41,14 @@ class ModelTrainerConfig:
     processed_filename: List[str]
     tuning: bool
     params: dict
+
+
+@dataclass(frozen=True)
+class ModelEvaluationConfig:
+    root_dir: Path
+    model_folder_path: Path
+    source_root: Path
+    processed_root: Path
+    source_filename: Path
+    processed_filename: List[str]
+    params: dict

@@ -20,13 +20,13 @@ class MoleculeDataset(Dataset):
         source_root,
         processed_root,
         source_filename,
-        procesed_filename,
+        processed_filename,
         test=False,
     ):
         self.source_root=source_root
         self.processed_root=processed_root
         self.source_filename=source_filename
-        self.procesed_filename=procesed_filename
+        self.processed_filename=processed_filename
         self.test=test
         self.data_name = 'test' if self.test else 'train'
         
@@ -44,7 +44,7 @@ class MoleculeDataset(Dataset):
     @property
     def processed_file_names(self) -> Union[str, List[str], Tuple[str, ...]]:
         
-        return self.procesed_filename
+        return self.processed_filename
     
     @property
     def processed_dir(self) -> str:

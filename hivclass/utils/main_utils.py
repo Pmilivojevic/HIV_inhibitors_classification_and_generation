@@ -3,7 +3,7 @@ from box.exceptions import BoxValueError
 import yaml
 from hivclass import logger
 import json
-import joblib
+import numpy as np
 from ensure import ensure_annotations
 from box import ConfigBox
 from pathlib import Path
@@ -12,8 +12,8 @@ from sklearn.metrics import roc_curve
 import seaborn as sns
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedSeq
-from ruamel.yaml.scalarfloat import ScalarFloat
-from decimal import Decimal
+# from ruamel.yaml.scalarfloat import ScalarFloat
+# from decimal import Decimal
 import re
 from io import StringIO
 
@@ -162,12 +162,26 @@ def plot_metric(
         )
     )
 
-def plot_confusion_matrix(conf_matrix, cm_path, epoch, title):
-    sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues")
-    plt.title(title)
-    plt.xlabel("Predicted")
-    plt.ylabel("Actual")
-    plt.savefig(os.path.join(cm_path, f'cm_epoch_{epoch}.png'))
+def plot_confusion_matrix(conf_matrix, cm_path, epoch):
+    # Transpose the matrix to match y-axis as Predicted, x-axis as Actual
+    conf_matrix = np.array(conf_matrix).T
+    
+    plt.figure(figsize=(6, 5))
+    sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", 
+                xticklabels=[1, 0], yticklabels=[1, 0], 
+                cbar=True, annot_kws={"size": 12})
+    
+    # Set axis labels
+    plt.xlabel("Actual", fontsize=12)
+    plt.ylabel("Predicted", fontsize=12)
+    
+    plt.title("Confusion Matrix for epoch {epoch}")
+    
+    # Adjust layout
+    plt.tight_layout()
+    
+    plt.savefig(os.path.join(cm_path, f'cm_epoch_{epoch}.png'), dpi=300, bbox_inches='tight')
+    plt.close()
 
 def plot_roc_curve(labels, predictions, roc_curve_path, epoch):
     fpr, tpr, _ = roc_curve(labels, predictions)

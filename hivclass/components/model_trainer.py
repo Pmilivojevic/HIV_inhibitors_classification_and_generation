@@ -127,8 +127,7 @@ class ModelTrainer:
                 plot_confusion_matrix(
                     conf_matrix,
                     stats_path,
-                    epoch,
-                    f'Confusion Matrix for epoch: {epoch}'
+                    epoch
                 )
 
                 auc_score = roc_auc_score(val_labels, val_preds)
