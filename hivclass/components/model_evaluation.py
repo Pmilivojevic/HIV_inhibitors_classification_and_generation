@@ -4,6 +4,7 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from hivclass.utils.molecule_dataset import MoleculeDataset
 from hivclass.utils.mol_gnn import MolGNN
 import os
+import numpy as np
 from hivclass.utils.main_utils import save_json, plot_confusion_matrix, plot_roc_curve
 import torch 
 from torch_geometric.data import DataLoader
@@ -37,7 +38,7 @@ class ModelEvaluation:
         
         model_path = os.path.join(
             self.config.model_folder_path,
-            os.listdir(self.config.model_folder_path)[0]
+            os.listdir(self.config.model_folder_path)[-1]
         )
         
         if os.path.exists(model_path):
@@ -58,7 +59,7 @@ class ModelEvaluation:
                 batch = batch.to(device)
                 
                 preds = model(batch.x.float(), batch.edge_attr.float(), batch.edge_index, batch.batch)
-                test_preds.extend(torch.round(torch.squeeze(preds)).cpu().detach().numpy())
+                test_preds.extend(np.rint(torch.sigmoid(preds).cpu().detach().numpy()))
                 test_labels.extend(batch.y.cpu().detach().numpy())
                 
                 accuracy = accuracy_score(test_labels, test_preds)
