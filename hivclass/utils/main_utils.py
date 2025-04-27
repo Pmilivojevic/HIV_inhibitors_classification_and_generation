@@ -164,7 +164,12 @@ def plot_metric(
 
 def plot_confusion_matrix(conf_matrix, cm_path, epoch):
     # Transpose the matrix to match y-axis as Predicted, x-axis as Actual
-    conf_matrix = np.array(conf_matrix).T
+    TN = conf_matrix[0,0]
+    FP = conf_matrix[0,1]
+    FN = conf_matrix[1,0]
+    TP = conf_matrix[1,1]
+    
+    conf_matrix = np.array([[TP, FP], [FN, TN]])
     
     plt.figure(figsize=(6, 5))
     sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", 
