@@ -114,7 +114,7 @@ class DataTransformation:
     
     def transformation_compose(self):
         if self.config.dataset_val_status:
-            if not os.listdir(self.config.root_dir):
+            if not os.path.exists(self.config.train_csv) and not os.path.exists(self.config.test_csv):
                 dfs = self.test_split_train_balanced()
                 self.data_preparation(dfs)
             else:

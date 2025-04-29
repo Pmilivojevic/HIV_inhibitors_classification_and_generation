@@ -37,7 +37,7 @@ class ModelEvaluation:
         
         model_path = os.path.join(
             self.config.model_folder_path,
-            os.listdir(self.config.model_folder_path)[0]
+            os.listdir(self.config.model_folder_path)[-1]
         )
         
         if os.path.exists(model_path):

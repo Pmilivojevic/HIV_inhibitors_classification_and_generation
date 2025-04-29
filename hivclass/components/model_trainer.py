@@ -1,9 +1,10 @@
 from hivclass.utils.molecule_dataset import MoleculeDataset
 from hivclass.entity.config_entity import ModelTrainerConfig
-from hivclass.utils.main_utils import create_directories
+from hivclass.utils.main_utils import create_directories, read_yaml
 from hivclass.constants import PARAMS_FILE_PATH
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score
+from pathlib import Path
 import os
 import numpy as np
 import pandas as pd
@@ -167,7 +168,7 @@ class ModelTrainer:
                 if self.config.tuning:
                     folder_name = str(len(os.listdir(self.config.stats)) + 1)
                 else:
-                    folder_name = "best_params"
+                    folder_name = "best_retrain"
                 
                 models_path = os.path.join(self.config.models, folder_name)
                 stats_path = os.path.join(self.config.stats, folder_name)
@@ -326,6 +327,34 @@ class ModelTrainer:
             
             with open(PARAMS_FILE_PATH, 'w') as file:
                 file.write(params_yaml)
+            
+            for folder in os.listdir(self.config.stats):
+                params_path = self.config.stats.joinpath(folder, 'params.yaml')
+                tuning_params = read_yaml(params_path)
+                
+                if self.config.params['BEST_PARAMETERS'] == tuning_params:
+                    best_stats_folder_path = self.config.stats.joinpath(folder)
+                    best_model_folder_path = self.config.models.joinpath(folder)
+                    
+                    try:
+                        best_stats_folder_path.rename(self.config.stats.joinpath('best_params'))
+                        print(f"Folder renamed from {best_stats_folder_path} to {self.config.stats.joinpath('best_params')}")
+                    except FileNotFoundError:
+                        print(f"Error: The folder {best_stats_folder_path} does not exist.")
+                    except FileExistsError:
+                        print(f"Error: A folder named {self.config.stats.joinpath('best_params')} already exists.")
+                    except PermissionError:
+                        print(f"Error: Permission denied to rename the folder.")
+                    
+                    try:
+                        best_model_folder_path.rename(self.config.models.joinpath('best_params'))
+                        print(f"Folder renamed from {best_stats_folder_path} to {self.config.stats.joinpath('best_params')}")
+                    except FileNotFoundError:
+                        print(f"Error: The folder {best_model_folder_path} does not exist.")
+                    except FileExistsError:
+                        print(f"Error: A folder named {self.config.models.joinpath('best_params')} already exists.")
+                    except PermissionError:
+                        print(f"Error: Permission denied to rename the folder.")
         else:
             params = self.config.params.BEST_PARAMETERS
             params = params.to_dict()
