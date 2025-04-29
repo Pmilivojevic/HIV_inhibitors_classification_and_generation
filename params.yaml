@@ -4,36 +4,36 @@ data_transformation:
 HYPERPARAMETERS:
   tuning_optimizer: [Random]
   early_stopping: [15]
-  tuning_iterations: [100]
+  tuning_iterations: [13]
   num_epochs: [300]
   batch_size: [512]
   learning_rate: [0.01, 0.001]
-  weight_decay: [0.001, 0.0001]
+  weight_decay: [0.0001]
   sgd_momentum: [0.9]
   scheduler_gamma: [1.0]
-  pos_weight: [1.0, 3.0, 5.0]
+  pos_weight: [3.0, 5.0]
   model_embedding_size: [128]
-  model_attention_heads: [2, 3]
-  model_layers: [2, 3, 4]
-  model_dropout_rate: [0.1, 0.2]
+  model_attention_heads: [3]
+  model_layers: [3, 4, 5]
+  model_dropout_rate: [0.1]
   model_top_k_ratio: [0.4]
   model_top_k_every_n: [3]
   model_dense_neurons: [64]
 BEST_PARAMETERS:
-  weight_decay: 0.001
+  weight_decay: 0.0001
   tuning_optimizer: Random
-  tuning_iterations: 100
+  tuning_iterations: 13
   sgd_momentum: 0.9
   scheduler_gamma: 1.0
   pos_weight: 3.0
   num_epochs: 300
   model_top_k_ratio: 0.4
   model_top_k_every_n: 3
-  model_layers: 4
+  model_layers: 3
   model_embedding_size: 128
-  model_dropout_rate: 0.2
+  model_dropout_rate: 0.1
   model_dense_neurons: 64
   model_attention_heads: 3
-  learning_rate: 0.001
+  learning_rate: 0.01
   early_stopping: 15
   batch_size: 512
