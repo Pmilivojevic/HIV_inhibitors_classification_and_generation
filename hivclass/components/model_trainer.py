@@ -3,7 +3,7 @@ from hivclass.entity.config_entity import ModelTrainerConfig
 from hivclass.utils.main_utils import create_directories, read_yaml
 from hivclass.constants import PARAMS_FILE_PATH
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score
+from sklearn.metrics import matthews_corrcoef, fbeta_score, precision_recall_curve, auc
 from pathlib import Path
 import os
 import numpy as np
@@ -11,13 +11,7 @@ import pandas as pd
 import yaml
 from hivclass.utils.molecule_dataset import MoleculeDataset
 from hivclass.utils.mol_gnn import MolGNN
-from hivclass.utils.main_utils import (
-    save_json,
-    plot_metric,
-    plot_confusion_matrix,
-    plot_roc_curve,
-    prepare_yaml_and_inline_lists
-)
+from hivclass.utils.main_utils import plot_metric, metric_report, prepare_yaml_and_inline_lists
 import torch 
 from torch_geometric.data import DataLoader
 from box import ConfigBox
@@ -53,6 +47,7 @@ class ModelTrainer:
     def train(self, params, epoch, model, train_loader, optimizer, criterion, device):
         model.train()
         total_loss = 0.0
+        train_preds_float = []
         train_preds = []
         train_labels = []
         
@@ -61,7 +56,9 @@ class ModelTrainer:
             optimizer.zero_grad()
             
             preds = model(batch.x.float(), batch.edge_attr.float(), batch.edge_index, batch.batch)
-            train_preds.extend(np.rint(torch.sigmoid(preds).cpu().detach().numpy()))
+            preds_float = torch.sigmoid(preds).cpu().detach().numpy()
+            train_preds_float.extend(preds_float)
+            train_preds.extend(np.rint(preds_float))
             train_labels.extend(batch.y.cpu().detach().numpy())
             
             loss = criterion(torch.squeeze(preds), batch.y.float())
@@ -69,84 +66,68 @@ class ModelTrainer:
             optimizer.step()
             
             if None not in train_preds:
-                accuracy = accuracy_score(train_labels, train_preds)
+                mcc = matthews_corrcoef(train_labels, train_preds)
+                f2 = fbeta_score(train_labels, train_preds, beta=2)
+                precision, recall, _ = precision_recall_curve(train_labels, train_preds_float)
+                auc_pr = auc(recall, precision)
             else:
-                accuracy = 0.0
+                mcc = 0.0
             
             total_loss += loss.item()
             
             print()
             sys.stdout.write(
-                "Epoch:%2d/%2d - Batch:%2d/%2d - train_loss:%.4f - train_accuracy:%.4f" %(
+                "Epoch:%2d/%2d - Batch:%2d/%2d - train_loss:%.4f - train_mcc:%.4f - f2_score:%.4f - auc_pr:%.4f" %(
                     epoch+1,
                     params.num_epochs,
                     i,
                     len(train_loader),
                     loss.item(),
-                    accuracy
+                    mcc,
+                    f2,
+                    auc_pr
                 )
             )
             sys.stdout.flush()
         
-        return total_loss / len(train_loader), accuracy
+        return total_loss / len(train_loader), mcc, f2, auc_pr
     
     def validation(self, epoch, model, val_loader, criterion, best_val_loss, stats_path,  device):
         model.eval()
         total_loss = 0.0
+        val_preds_float = []
         val_preds = []
         val_labels = []
+        mcc = -1
+        f2 = 0
+        auc_pr = 0
         
         with torch.no_grad():
             for batch in tqdm(val_loader):
                 batch.to(device)
                 
                 preds = model(batch.x.float(), batch.edge_attr.float(), batch.edge_index, batch.batch)
-                val_preds.extend(np.rint(torch.sigmoid(preds).cpu().detach().numpy()))
+                preds_float = torch.sigmoid(preds).cpu().detach().numpy()
+                val_preds.extend(np.rint(preds_float))
+                val_preds_float.extend(preds_float)
                 val_labels.extend(batch.y.cpu().detach().numpy())
                 
                 loss = criterion(torch.squeeze(preds), batch.y.float())
                 total_loss += loss.item()
-                accuracy = accuracy_score(val_labels, val_preds)
+                # mcc = matthews_corrcoef(val_labels, val_preds)
             
             epoch_loss = total_loss / len(val_loader)
             
             if epoch_loss < best_val_loss:
-                report = classification_report(
-                    val_labels,
+                mcc, f2, auc_pr = metric_report(
+                    val_preds_float,
                     val_preds,
-                    zero_division=0,
-                    output_dict=True
-                )
-
-                save_json(
-                    os.path.join(stats_path, f'report_{epoch}.json'),
-                    report
-                )
-
-                conf_matrix = confusion_matrix(val_labels, val_preds)
-
-                plot_confusion_matrix(
-                    conf_matrix,
-                    stats_path,
-                    epoch
-                )
-
-                auc_score = roc_auc_score(val_labels, val_preds)
-                auc_score_dict = {'auc_score': auc_score}
-
-                save_json(
-                    os.path.join(stats_path, f'auc_score_{epoch}.json'), 
-                    auc_score_dict
-                )
-                
-                plot_roc_curve(
                     val_labels,
-                    val_preds,
                     stats_path,
                     epoch
                 )
                 
-        return epoch_loss, accuracy
+        return epoch_loss, mcc, f2, auc_pr
     
     def train_compose(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -162,7 +143,7 @@ class ModelTrainer:
         train_dataset, val_dataset = self.train_val_separation(dataset)
         
         def train_tuning(params):
-            try:
+            # try:
                 params = params[0]
                 
                 if self.config.tuning:
@@ -208,14 +189,19 @@ class ModelTrainer:
                 
                 train_losses = []
                 val_losses = []
-                train_accuracies = []
-                val_accuracies = []
+                train_mccs = []
+                val_mccs = []
+                train_f2s = []
+                val_f2s = []
+                train_auc_prs = []
+                val_auc_prs = []
                 best_val_loss = float('inf')
                 early_stopping_counter = 0
+                plot_metrics = ['loss', 'mcc', 'f2_score', 'auc_pr']
                 
                 for epoch in tqdm(range(params.num_epochs)):
                     if early_stopping_counter <= params.early_stopping:
-                        train_epoch_loss, train_epoch_acc = self.train(
+                        train_epoch_loss, train_epoch_mcc, train_f2, train_auc_pr = self.train(
                             params,
                             epoch,
                             model,
@@ -226,9 +212,11 @@ class ModelTrainer:
                         )
                         
                         train_losses.append(train_epoch_loss)
-                        train_accuracies.append(train_epoch_acc)
+                        train_mccs.append(train_epoch_mcc)
+                        train_f2s.append(train_f2)
+                        train_auc_prs.append(train_auc_pr)
                         
-                        val_epoch_loss, val_epoch_acc = self.validation(
+                        val_epoch_loss, val_epoch_mcc, val_f2, val_auc_pr = self.validation(
                             epoch,
                             model,
                             val_loader,
@@ -239,13 +227,15 @@ class ModelTrainer:
                         )
                         
                         val_losses.append(val_epoch_loss)
-                        val_accuracies.append(val_epoch_acc)
+                        val_mccs.append(val_epoch_mcc)
+                        val_f2s.append(val_f2)
+                        val_auc_prs.append(val_auc_pr)
                         
                         print(f'Epoch [{epoch+1}/{params.num_epochs}], '
                             f'Loss: {train_epoch_loss:.4f}, '
                             f'Validation Loss: {val_epoch_loss:.4f}, '
-                            f'Train Accuracy: {train_epoch_acc:.2f}%, '
-                            f'Validation Accuracy: {val_epoch_acc:.2f}%')
+                            f'Train Accuracy: {train_epoch_mcc:.2f}%, '
+                            f'Validation Accuracy: {val_epoch_mcc:.2f}%')
                         
                         if float(val_epoch_loss) < best_val_loss:
                             torch.save(model.state_dict(), os.path.join(models_path, f'model_{epoch}.pth'))
@@ -258,56 +248,42 @@ class ModelTrainer:
                     else:
                         print("Early stopping due to no improvement.")
                         epochs_range = range(1, len(train_losses) + 1)
+                        train_metrics = [train_losses, train_mccs, train_f2s, train_auc_prs]
+                        val_metrics = [val_losses, val_mccs, val_f2s, val_auc_prs]
                         
-                        plot_metric(
+                        for type, train_metric, val_metric in zip(plot_metrics, train_metrics, val_metrics):
+                            plot_metric(
                             stats_path,
                             epochs_range,
-                            train_losses,
-                            val_losses,
-                            'Train Loss',
-                            'Validation Loss',
-                        )
-                        
-                        plot_metric(
-                            stats_path,
-                            epochs_range,
-                            train_accuracies,
-                            val_accuracies,
-                            'Train Accuracies',
-                            'Validation Accuracies',
+                            train_metric,
+                            val_metric,
+                            f"{type}"
                         )
                         
                         return [best_val_loss]
                 
                 print(f"Finishing training with best test loss: {best_val_loss}")
                 epochs_range = range(1, params.num_epochs + 1)
-
-                plot_metric(
-                    stats_path,
-                    epochs_range,
-                    train_losses,
-                    val_losses,
-                    'Train Loss',
-                    'Validation Loss',
-                )
+                train_metrics = [train_losses, train_mccs, train_f2s, train_auc_prs]
+                val_metrics = [val_losses, val_mccs, val_f2s, val_auc_prs]
                 
-                plot_metric(
+                for type, train_metric, val_metric in zip(plot_metrics, train_metrics, val_metrics):
+                    plot_metric(
                     stats_path,
                     epochs_range,
-                    train_accuracies,
-                    val_accuracies,
-                    'Train Accuracies',
-                    'Validation Accuracies',
+                    train_metric,
+                    val_metric,
+                    f"{type}"
                 )
                 
                 return [best_val_loss]
             
-            except Exception as e:
-                print(f"[ERROR] Training failed for params: {params}")
-                print(f"[ERROR] Exception: {e}")
+            # except Exception as e:
+            #     print(f"[ERROR] Training failed for params: {params}")
+            #     print(f"[ERROR] Exception: {e}")
 
-                # return a large loss so Mango avoids this config
-                return [float('inf')]
+            #     # return a large loss so Mango avoids this config
+            #     return [float('inf')]
         
         if self.config.tuning:
             print("Running hyperparameter search...")

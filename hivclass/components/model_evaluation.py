@@ -1,11 +1,11 @@
 from hivclass.utils.molecule_dataset import MoleculeDataset
 from hivclass.entity.config_entity import ModelEvaluationConfig
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score
+from sklearn.metrics import matthews_corrcoef
 from hivclass.utils.molecule_dataset import MoleculeDataset
 from hivclass.utils.mol_gnn import MolGNN
 import os
 import numpy as np
-from hivclass.utils.main_utils import save_json, plot_confusion_matrix, plot_roc_curve
+from hivclass.utils.main_utils import metric_report
 import torch 
 from torch_geometric.data import DataLoader
 from box import ConfigBox
@@ -51,6 +51,7 @@ class ModelEvaluation:
     
     def testing(self, test_loader, model, device):
         model.eval()
+        test_preds_float = []
         test_preds = []
         test_labels = []
         
@@ -59,21 +60,23 @@ class ModelEvaluation:
                 batch = batch.to(device)
                 
                 preds = model(batch.x.float(), batch.edge_attr.float(), batch.edge_index, batch.batch)
-                test_preds.extend(np.rint(torch.sigmoid(preds).cpu().detach().numpy()))
+                preds_float = torch.sigmoid(preds).cpu().detach().numpy()
+                test_preds_float.extend(preds_float)
+                test_preds.extend(np.rint(preds_float))
                 test_labels.extend(batch.y.cpu().detach().numpy())
                 
-                accuracy = accuracy_score(test_labels, test_preds)
+                mcc = matthews_corrcoef(test_labels, test_preds)
                 
                 sys.stdout.write(
                     "Batch:%2d/%2d - test_accuracy:%.4f" %(
                         i,
                         len(test_loader),
-                        accuracy
+                        mcc
                     )
                 )
                 sys.stdout.flush()
         
-        return test_preds, test_labels
+        return test_preds, test_preds_float, test_labels
     
     def evaluation(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -83,39 +86,6 @@ class ModelEvaluation:
         
         model = self.model_preparation(test_dataset, device)
         
-        test_preds, test_labels = self.testing(test_loader, model, device)
+        test_preds, test_preds_float,  test_labels = self.testing(test_loader, model, device)
         
-        report = classification_report(
-                    test_labels,
-                    test_preds,
-                    zero_division=0,
-                    output_dict=True
-                )
-
-        save_json(
-            os.path.join(self.config.root_dir, f'report.json'),
-            report
-        )
-
-        conf_matrix = confusion_matrix(test_labels, test_preds)
-
-        plot_confusion_matrix(
-            conf_matrix,
-            self.config.root_dir,
-            'test'
-        )
-
-        auc_score = roc_auc_score(test_labels, test_labels)
-        auc_score_dict = {'auc_score': auc_score}
-
-        save_json(
-            os.path.join(self.config.root_dir, f'auc_score.json'), 
-            auc_score_dict
-        )
-        
-        plot_roc_curve(
-            test_labels,
-            test_preds,
-            self.config.root_dir,
-            'test'
-        )
+        _, _, _ = metric_report(test_preds_float, test_preds, test_labels, self.config.root_dir, 'test')

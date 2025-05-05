@@ -8,7 +8,17 @@ from ensure import ensure_annotations
 from box import ConfigBox
 from pathlib import Path
 import matplotlib.pyplot as plt
-from sklearn.metrics import roc_curve
+from sklearn.metrics import (
+    matthews_corrcoef,
+    precision_score,
+    recall_score,
+    f1_score,
+    fbeta_score,
+    confusion_matrix,
+    precision_recall_curve,
+    auc,
+    roc_curve
+    )
 import seaborn as sns
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedSeq
@@ -144,21 +154,21 @@ def plot_metric(
         range,
         train_matric,
         val_matric,
-        train_label,
-        val_label
+        type
     ):
 
+    
     plt.figure(figsize=(12, 6))
-    plt.plot(range, train_matric, label=train_label)
-    plt.plot(range, val_matric, label=val_label)
+    plt.plot(range, train_matric, label=f"train_{type}")
+    plt.plot(range, val_matric, label=f"val_{type}")
     plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.title(f'Train/validation Loss')
+    plt.ylabel(f"{type}")
+    plt.title(f'Train/Validation {type}')
     plt.legend()
     plt.savefig(
         os.path.join(
             metric_path,
-            f'Train_Val_{str.split(train_label)[-1]}.png'
+            f'Train_Val_{type}.png'
         )
     )
 
@@ -188,16 +198,61 @@ def plot_confusion_matrix(conf_matrix, cm_path, epoch):
     plt.savefig(os.path.join(cm_path, f'cm_epoch_{epoch}.png'), dpi=300, bbox_inches='tight')
     plt.close()
 
-def plot_roc_curve(labels, predictions, roc_curve_path, epoch):
-    fpr, tpr, _ = roc_curve(labels, predictions)
+def plot_metric_curve(xs, ys, curve_path, epoch, pr=True):
+    if pr:
+        xlabel = "Precision"
+        ylabel = "Recall"
+        title = "Precision-Recall Curve"
+        lable = "PR_Curve"
+    else:
+        xlabel = "False Positive Rate"
+        ylabel = "True Positive Rate"
+        title = "Receiver Operating Characteristic Curve"
+        lable = "ROC_Curve"
     
     plt.figure()
-    plt.plot(fpr, tpr, label="ROC Curve")
-    plt.xlabel("False Positive Rate")
-    plt.ylabel("True Positive Rate")
-    plt.title("ROC Curve")
+    plt.plot(xs, ys, label=lable)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
     plt.legend()
     plt.savefig(os.path.join(
-        roc_curve_path,
-        f'roc_curve_epoch_{epoch}.png'
+        curve_path,
+        f'{lable}_epoch_{epoch}.png'
     ))
+
+def metric_report(preds_float, preds, labels, report_path, epoch):
+    mcc = matthews_corrcoef(labels, preds)
+    precision = precision_score(labels, preds, zero_division=0)
+    recall = recall_score(labels, preds, zero_division=0)
+    f1 = f1_score(labels, preds, zero_division=0)
+    f2 = fbeta_score(labels, preds, beta=2, zero_division=0)
+    
+    pr, re, thr1 = precision_recall_curve(labels, preds_float)
+    auc_pr = auc(re, pr)
+    
+    fpr, tpr, thr2 = roc_curve(labels, preds_float)
+    auc_roc = auc(fpr, tpr)
+    
+    cm = confusion_matrix(labels, preds)
+    
+    report = {
+        'mcc': mcc,
+        'precision': precision,
+        'recall': recall,
+        'f1_score': f1,
+        'f2_score': f2,
+        'auc_pr': auc_pr,
+        'auc_roc': auc_roc
+    }
+    
+    save_json(
+        os.path.join(report_path, f'report_{epoch}.json'),
+        report
+    )
+    
+    plot_metric_curve(pr, re, report_path, epoch)
+    plot_metric_curve(fpr, tpr, report_path, epoch, pr=False)
+    plot_confusion_matrix(cm, report_path, epoch)
+    
+    return mcc, f2, auc_pr

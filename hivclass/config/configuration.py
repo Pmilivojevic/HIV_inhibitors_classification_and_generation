@@ -27,9 +27,9 @@ class ConfigurationManager:
         create_directories([config.root_dir])
         
         data_ingestion_config = DataIngestionConfig(
-            root_dir=config.root_dir,
+            root_dir=Path(config.root_dir),
             source_URL=config.source_URL,
-            local_data_file=config.local_data_file
+            local_data_file=Path(config.local_data_file)
         )
         
         return data_ingestion_config
@@ -41,9 +41,9 @@ class ConfigurationManager:
         create_directories([config.root_dir])
         
         data_validation_config = DataValidationConfig(
-            root_dir=config.root_dir,
-            local_data_file=config.local_data_file,
-            STATUS_FILE=config.STATUS_FILE,
+            root_dir=Path(config.root_dir),
+            local_data_file=Path(config.local_data_file),
+            STATUS_FILE=Path(config.STATUS_FILE),
             all_schema=schema
         )
         
@@ -62,12 +62,12 @@ class ConfigurationManager:
         create_directories([config.root_dir, config.train_folder, config.test_folder])
         
         data_transformation_config = DataTransformationConfig(
-            root_dir=config.root_dir,
-            data_csv=config.data_csv,
-            train_csv=config.train_csv,
-            test_csv=config.test_csv,
-            train_folder=config.train_folder,
-            test_folder=config.test_folder,
+            root_dir=Path(config.root_dir),
+            data_csv=Path(config.data_csv),
+            train_csv=Path(config.train_csv),
+            test_csv=Path(config.test_csv),
+            train_folder=Path(config.train_folder),
+            test_folder=Path(config.test_folder),
             params=params.split_size,
             dataset_val_status=status
         )
@@ -82,10 +82,10 @@ class ConfigurationManager:
         
         model_trainer_config = ModelTrainerConfig(
             root_dir=config.root_dir,
-            models=config.models,
-            stats=config.stats,
-            source_root=config.source_root,
-            processed_root=config.processed_root,
+            models=Path(config.models),
+            stats=Path(config.stats),
+            source_root=Path(config.source_root),
+            processed_root=Path(config.processed_root),
             source_filename=config.source_filename,
             processed_filename=config.processed_filename,
             tuning=config.tuning,
@@ -101,10 +101,10 @@ class ConfigurationManager:
         create_directories([config.root_dir])
         
         model_evaluation_config = ModelEvaluationConfig(
-            root_dir=config.root_dir,
-            model_folder_path=config.model_folder_path,
-            source_root=config.source_root,
-            processed_root=config.processed_root,
+            root_dir=Path(config.root_dir),
+            model_folder_path=Path(config.model_folder_path),
+            source_root=Path(config.source_root),
+            processed_root=Path(config.processed_root),
             source_filename=config.source_filename,
             processed_filename=config.processed_filename,
             params=params
