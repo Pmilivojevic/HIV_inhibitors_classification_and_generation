@@ -92,15 +92,22 @@ class ModelTrainer:
         
         return total_loss / len(train_loader), mcc, f2, auc_pr
     
-    def validation(self, epoch, model, val_loader, criterion, best_val_loss, stats_path,  device):
+    def validation(
+        self,
+        epoch,
+        model,
+        val_loader,
+        criterion,
+        metrics,
+        best_val_loss,
+        stats_path,
+        device
+    ):
         model.eval()
         total_loss = 0.0
         val_preds_float = []
         val_preds = []
         val_labels = []
-        mcc = -1
-        f2 = 0
-        auc_pr = 0
         
         with torch.no_grad():
             for batch in tqdm(val_loader):
@@ -119,7 +126,7 @@ class ModelTrainer:
             epoch_loss = total_loss / len(val_loader)
             
             if epoch_loss < best_val_loss:
-                mcc, f2, auc_pr = metric_report(
+                metrics['mcc'], metrics['f2'], metrics['auc_pr'] = metric_report(
                     val_preds_float,
                     val_preds,
                     val_labels,
@@ -127,7 +134,7 @@ class ModelTrainer:
                     epoch
                 )
                 
-        return epoch_loss, mcc, f2, auc_pr
+        return epoch_loss, metrics
     
     def train_compose(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -198,6 +205,11 @@ class ModelTrainer:
                 best_val_loss = float('inf')
                 early_stopping_counter = 0
                 plot_metrics = ['loss', 'mcc', 'f2_score', 'auc_pr']
+                metrics = {
+                    'mcc': -1,
+                    'f2': 0,
+                    'auc_pr': 0
+                }
                 
                 for epoch in tqdm(range(params.num_epochs)):
                     if early_stopping_counter <= params.early_stopping:
@@ -216,26 +228,33 @@ class ModelTrainer:
                         train_f2s.append(train_f2)
                         train_auc_prs.append(train_auc_pr)
                         
-                        val_epoch_loss, val_epoch_mcc, val_f2, val_auc_pr = self.validation(
+                        val_epoch_loss, metrics = self.validation(
                             epoch,
                             model,
                             val_loader,
                             criterion,
+                            metrics,
                             best_val_loss,
                             stats_path,
                             device
                         )
                         
                         val_losses.append(val_epoch_loss)
-                        val_mccs.append(val_epoch_mcc)
-                        val_f2s.append(val_f2)
-                        val_auc_prs.append(val_auc_pr)
+                        val_mccs.append(metrics['mcc'])
+                        val_f2s.append(metrics['f2'])
+                        val_auc_prs.append(metrics['auc_pr'])
                         
-                        print(f'Epoch [{epoch+1}/{params.num_epochs}], '
-                            f'Loss: {train_epoch_loss:.4f}, '
-                            f'Validation Loss: {val_epoch_loss:.4f}, '
-                            f'Train Accuracy: {train_epoch_mcc:.2f}%, '
-                            f'Validation Accuracy: {val_epoch_mcc:.2f}%')
+                        print(
+                            f"Epoch [{epoch+1}/{params.num_epochs}], "
+                            f"Loss: {train_epoch_loss:.4f}, "
+                            f"Train mcc: {train_epoch_mcc:.4f}, "
+                            f"Train f2_score: {train_f2:.4f}, "
+                            f"Train auc_pr: {train_auc_pr:.4f}, "
+                            f"Val Loss: {val_epoch_loss:.4f}, "
+                            f"Val mcc: {metrics['mcc']:.4f}, "
+                            f"Val f2_score: {metrics['f2']:.4f}, "
+                            f"Val auc_pr: {metrics['auc_pr']:.4f}, "
+                        )
                         
                         if float(val_epoch_loss) < best_val_loss:
                             torch.save(model.state_dict(), os.path.join(models_path, f'model_{epoch}.pth'))
