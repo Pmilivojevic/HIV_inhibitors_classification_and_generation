@@ -51,4 +51,5 @@ class ModelEvaluationConfig:
     processed_root: Path
     source_filename: Path
     processed_filename: List[str]
+    tuning: bool
     params: dict

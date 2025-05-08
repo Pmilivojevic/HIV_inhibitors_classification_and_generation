@@ -36,10 +36,18 @@ class ModelEvaluation:
         
         model = MolGNN(feature_size=dataset[0].x.shape[1], model_params=model_params).to(device)
         
-        model_path = os.path.join(
-            self.config.model_folder_path,
-            os.listdir(self.config.model_folder_path)[-1]
-        )
+        if self.config.tuning:
+            models_path = os.path.join(
+                self.config.model_folder_path,
+                'best_params'
+            )
+        else:
+            models_path = os.path.join(
+                self.config.model_folder_path,
+                'best_retrain'
+            )
+        model_path = os.path.join(models_path, os.listdir(models_path)[0])
+        print(model_path)
         
         if os.path.exists(model_path):
             model.load_state_dict(torch.load(model_path, map_location=device))

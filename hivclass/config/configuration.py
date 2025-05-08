@@ -107,6 +107,7 @@ class ConfigurationManager:
             processed_root=Path(config.processed_root),
             source_filename=config.source_filename,
             processed_filename=config.processed_filename,
+            tuning=self.config.model_trainer.tuning,
             params=params
         )
         

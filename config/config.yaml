@@ -30,7 +30,7 @@ model_trainer:
 
 model_evaluation:
   root_dir: artifacts/model_evaluation
-  model_folder_path: artifacts/model_trainer/models/best_params
+  model_folder_path: artifacts/model_trainer/models
   source_root: artifacts/data_ingestion
   processed_root: artifacts/data_transformation
   source_filename: HIV.csv
