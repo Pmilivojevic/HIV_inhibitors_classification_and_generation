@@ -44,7 +44,8 @@ class DataTransformation:
         
         # Ensure the train set remains balanced by oversampling the smaller class
         train = np.concatenate([
-            big_train, small_train,
+            big_train,
+            small_train,
             # random.choices(small_train, k=len(big_train) - len(small_train))
         ])
 

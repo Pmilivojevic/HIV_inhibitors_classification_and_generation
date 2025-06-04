@@ -4,6 +4,7 @@ from hivclass.utils.main_utils import create_directories, read_yaml
 from hivclass.constants import PARAMS_FILE_PATH
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import matthews_corrcoef, fbeta_score, precision_recall_curve, auc
+import random
 from pathlib import Path
 import os
 import numpy as np
@@ -28,16 +29,48 @@ class ModelTrainer:
             self.config.processed_root,
             self.config.processed_filename[3]
         ))
+        data_df['Index'] = range(len(data_df))
+        data_df.insert(0, 'Index', data_df.pop('Index'))
         
-        train_df, val_df = train_test_split(
-            data_df,
+        p_val = data_df[data_df.HIV_active == 1].to_numpy()
+        n_val = data_df[data_df.HIV_active == 0].to_numpy()
+        
+        if len(p_val) >= len(n_val):
+            big, small = p_val, n_val
+        else:
+            big, small = n_val, p_val
+        
+        small_train, small_val = train_test_split(
+            small,
             test_size=self.config.params.data_transformation.val_size,
-            stratify=data_df.HIV_active,
             random_state=42
         )
         
-        train_idxs = train_df.index.tolist()
-        val_idxs = val_df.index.tolist()
+        big_train, big_val = train_test_split(
+            big,
+            test_size=len(small_val),
+            random_state=42
+        )
+        
+        val = np.concatenate([small_val, big_val])
+        np.random.shuffle(val)
+        
+        train = np.concatenate([
+            big_train,
+            small_train,
+            random.choices(small_train, k=len(big_train) - len(small_train))
+        ])
+        np.random.shuffle(train)
+        
+        # train_df, val_df = train_test_split(
+        #     data_df,
+        #     test_size=self.config.params.data_transformation.val_size,
+        #     stratify=data_df.HIV_active,
+        #     random_state=42
+        # )
+        
+        train_idxs = [i[0] for i in train]
+        val_idxs = [i[0] for i in val]
         
         train = train_dataset.index_select(train_idxs)
         val = train_dataset.index_select(val_idxs)
